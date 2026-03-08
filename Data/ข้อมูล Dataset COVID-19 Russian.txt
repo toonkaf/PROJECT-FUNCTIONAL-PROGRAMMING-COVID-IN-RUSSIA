@@ -1,0 +1,21 @@
+กลุ่มนี้มาเรียนวันนี้ (67070138 , 67070146 , 67070150)
+ข้อมูล Dataset "COVID-19 Russia regions cases"
+
+Dataset นี้เป็นข้อมูลเกี่ยวกับเคสของโรค COVID-19 ในประเทศรัสเซียในช่วงเวลา (2020-03-02 - 2020-07-31)
+ข้อมูลแบ่งชัดเจนถึง วันที่ ภูมิภาคหรือเมือง ผู้ติดเชื้อเพิ่ม/เสียชีวิต/รักษาหาย ทั้งรายวันและยอดรวม
+โดยจะมีคอลัมน์ต่าง ๆ ดังนี้
+
+ชื่อคอลัมน์			คำอธิบาย				   ชนิดข้อมูล
+Date		วันที่			DATE
+Region/City	ภูมิภาคหรือเมือง		VARCHAR
+Region/City-Eng ภูมิภาคหรือเมืองในภาษาอังกฤษ	  VARCHAR
+Region-ID	รหัสภูมิภาค		INT
+Day-Confirmed	ผู้ป่วยที่เพิ่มในวันนั้น		INT
+Day-Deaths	จำนวนผู้เสียชีวิตในวันนั้น	INT
+Day-Recovered	จำนวนผู้ที่รักษาหายในวันนั้น	INT
+Confirmed	ยอดรวมผู้ติดเชื้อ		INT
+Deaths		ยอดรวมผู้เสียชีวิต		INT
+Recovered	ยอดรวมผู้ที่รักษาหาย		INT
+
+link "covid19-russia-cases-scrf.csv"
+https://drive.google.com/file/d/1s14dILNkNoAb4okBpCStO1qmBIu1BGJE/view?usp=sharing
