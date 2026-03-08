@@ -137,6 +137,67 @@ object CovidAnalysis {
     val end = System.nanoTime()
     (end - start) / 1e6
   }
+
+  // Puriwaj
+  def dailyCitySummary(inputFile: String, outputFile: String): Double = {
+
+    val start = System.nanoTime()
+
+    val lines = Source.fromFile(inputFile).getLines().drop(1).toList
+
+    val result =
+      lines
+        .map(_.split(",").map(_.trim))
+        .groupBy(c => (c(0), c(2)))   // (date, region)
+        .map { case ((date, region), records) =>
+
+          val confirmed = records.map(_(4).toDouble).sum
+          val deaths = records.map(_(5).toDouble).sum
+          val recovered = records.map(_(6).toDouble).sum
+
+          s"""{"date":"$date","region":"$region","confirmed":$confirmed,"deaths":$deaths,"recovered":$recovered}"""
+        }
+        .toList
+        .sorted
+
+    new PrintWriter(outputFile) {
+      write(result.mkString("[\n  ", ",\n  ", "\n]"))
+      close()
+    }
+
+    val end = System.nanoTime()
+    (end - start) / 1e6
+  }
+
+  def dailyCitySummaryParallel(inputFile: String, outputFile: String): Double = {
+
+    val start = System.nanoTime()
+
+    val lines = Source.fromFile(inputFile).getLines().drop(1).toList
+
+    val result =
+      lines.par
+        .map(_.split(",").map(_.trim))
+        .groupBy(c => (c(0), c(2)))
+        .map { case ((date, region), records) =>
+
+          val confirmed = records.map(_(4).toDouble).sum
+          val deaths = records.map(_(5).toDouble).sum
+          val recovered = records.map(_(6).toDouble).sum
+
+          s"""{"date":"$date","region":"$region","confirmed":$confirmed,"deaths":$deaths,"recovered":$recovered}"""
+        }
+        .toList
+        .sorted
+
+    new PrintWriter(outputFile) {
+      write(result.mkString("[\n  ", ",\n  ", "\n]"))
+      close()
+    }
+
+    val end = System.nanoTime()
+    (end - start) / 1e6
+  }
 }
 
 
@@ -159,4 +220,15 @@ object CovidAnalysis {
   println("\nDaily Summary Aggregation (confirmed + Death + Recovered)")
   println(f"Sequential Processing : $dailyfunctionalTime%.2f ms")
   println(f"Parallel Processing   : $dailyparallelTime%.2f ms")
+
+  println("\nDaily City Summary (confirmed, deaths, recovered per city per day)")
+
+  val cityTime =
+    CovidAnalysis.dailyCitySummary(csvFile, "daily_city_functional.json")
+
+  val cityParallelTime =
+    CovidAnalysis.dailyCitySummaryParallel(csvFile, "daily_city_parallel.json")
+
+  println(f"Sequential Processing : $cityTime%.2f ms")
+  println(f"Parallel Processing   : $cityParallelTime%.2f ms")
 }
