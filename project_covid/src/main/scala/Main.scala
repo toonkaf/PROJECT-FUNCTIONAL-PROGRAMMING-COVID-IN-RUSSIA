@@ -17,14 +17,15 @@ object CovidAnalysis {
     }
   }
 
+  //Ratchanon
   def totalImpact(inputFile: String, outputFile: String): Double = {
+
+    val lines = Source.fromFile(inputFile).getLines().drop(1).toList
 
     val start = System.nanoTime()
 
     val json =
-      Source.fromFile(inputFile)
-        .getLines()
-        .drop(1)
+      lines
         .map { line =>
           val c = line.split(",")
 
@@ -51,12 +52,11 @@ object CovidAnalysis {
   }
 
 
-  // Parallel version
   def totalImpactParallel(inputFile: String, outputFile: String): Double = {
 
-    val start = System.nanoTime()
-
     val lines = Source.fromFile(inputFile).getLines().drop(1).toList
+
+    val start = System.nanoTime()
 
     val json =
       lines.par
@@ -150,13 +150,13 @@ object CovidAnalysis {
   println("Execution Time Comparison")
   println("-------------------------")
   println("Total Impact (Daily confirmed + Death + Recovered)")
-  println(f"Functional Processing : $functionalTime%.2f ms")
+  println(f"Sequential Processing : $functionalTime%.2f ms")
   println(f"Parallel Processing   : $parallelTime%.2f ms")
 
   val dailyfunctionalTime = CovidAnalysis.dailySummary(csvFile, "daily_summary_functional.json")
   val dailyparallelTime = CovidAnalysis.dailySummaryParallel(csvFile, "daily_summary_parallel.json")
 
   println("\nDaily Summary Aggregation (confirmed + Death + Recovered)")
-  println(f"Functional Processing : $dailyfunctionalTime%.2f ms")
+  println(f"Sequential Processing : $dailyfunctionalTime%.2f ms")
   println(f"Parallel Processing   : $dailyparallelTime%.2f ms")
 }
