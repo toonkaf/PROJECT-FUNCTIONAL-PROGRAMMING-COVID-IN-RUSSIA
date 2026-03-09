@@ -1,21 +1,32 @@
 import scala.io.Source
 import java.io.PrintWriter
+import scala.util.Try
 import scala.collection.parallel.CollectionConverters._
-case class CovidRecord(date: String, confirmed: Double, deaths: Double, recovered: Double)
+
+case class CovidRecord(date: String, region: String, confirmed: Double, deaths: Double, recovered: Double)
 
 object CovidAnalysis {
-  def parseLine(line: String): Option[CovidRecord] = {
-    val c = line.split(",").map(_.trim)
-    if (c.length < 7) return None
 
-    import scala.util.{Try, Success, Failure}
-    Try {
-      CovidRecord(c(0), c(4).toDouble, c(5).toDouble, c(6).toDouble)
-    } match {
-      case Success(r) => Some(r)
-      case Failure(_) => None
+  def parseLine(line: String): Either[String, CovidRecord] = {
+
+    val c = line.split(",").map(_.trim)
+
+    if (c.length < 7) Left("Invalid column length")
+    else {
+
+      val parsed =
+        for {
+          confirmed <- Try(c(4).toDouble).toOption
+          deaths <- Try(c(5).toDouble).toOption
+          recovered <- Try(c(6).toDouble).toOption
+        } yield CovidRecord(c(0), c(2), confirmed, deaths, recovered)
+
+      parsed.toRight(s"Invalid numeric value: $line")
     }
   }
+
+  def toJsonArray(data: Seq[String]): String =
+    data.mkString("[\n  ", ",\n  ", "\n]")
 
   //Ratchanon
   def totalImpact(inputFile: String, outputFile: String): Double = {
@@ -24,26 +35,20 @@ object CovidAnalysis {
 
     val start = System.nanoTime()
 
-    val json =
+    val records =
       lines
-        .map { line =>
-          val c = line.split(",")
+        .map(parseLine)
+        .collect { case Right(r) => r }
 
-          val date = c(0)
-          val region = c(2)
-
-          val confirmed = c(4).toDouble
-          val deaths = c(5).toDouble
-          val recovered = c(6).toDouble
-
-          val total = confirmed + deaths + recovered
-
-          s"""{"date":"$date","region":"$region","totalImpact":$total}"""
+    val json =
+      records
+        .map { r =>
+          val total = r.confirmed + r.deaths + r.recovered
+          s"""{"date":"${r.date}","region":"${r.region}","totalImpact":$total}"""
         }
-        .mkString("[\n  ", ",\n  ", "\n]")
 
     new PrintWriter(outputFile) {
-      write(json)
+      write(toJsonArray(json))
       close()
     }
 
@@ -58,26 +63,21 @@ object CovidAnalysis {
 
     val start = System.nanoTime()
 
+    val records =
+      lines
+        .map(parseLine)
+        .collect { case Right(r) => r }
+
     val json =
-      lines.par
-        .map { line =>
-          val c = line.split(",")
-
-          val date = c(0)
-          val region = c(2)
-
-          val confirmed = c(4).toDouble
-          val deaths = c(5).toDouble
-          val recovered = c(6).toDouble
-
-          val total = confirmed + deaths + recovered
-
-          s"""{"date":"$date","region":"$region","totalImpact":$total}"""
+      records.par
+        .map { r =>
+          val total = r.confirmed + r.deaths + r.recovered
+          s"""{"date":"${r.date}","region":"${r.region}","totalImpact":$total}"""
         }
-        .mkString("[\n  ", ",\n  ", "\n]")
+        .toList
 
     new PrintWriter(outputFile) {
-      write(json)
+      write(toJsonArray(json))
       close()
     }
 
@@ -87,24 +87,32 @@ object CovidAnalysis {
 
   // Yasmina
   def dailySummary(inputFile: String, outputFile: String): Double = {
-    val start = System.nanoTime()
-    
-    val lines = scala.io.Source.fromFile(inputFile).getLines().drop(1).toList
-    
-    val summaryResults = lines
-      .flatMap(parseLine)
-      .groupBy(_.date)
-      .map { case (date, records) =>
-        val totalC = records.map(_.confirmed).sum
-        val totalD = records.map(_.deaths).sum
-        val totalR = records.map(_.recovered).sum
 
-        s"""{"date":"$date","totalConfirmed":$totalC,"totalDeaths":$totalD,"totalRecovered":$totalR}"""
-      }
-      .toList.sorted
+    val start = System.nanoTime()
+
+    val lines = Source.fromFile(inputFile).getLines().drop(1).toList
+
+    val records =
+      lines
+        .map(parseLine)
+        .collect { case Right(r) => r }
+
+    val summaryResults =
+      records
+        .groupBy(_.date)
+        .map { case (date, rs) =>
+
+          val totalC = rs.map(_.confirmed).sum
+          val totalD = rs.map(_.deaths).sum
+          val totalR = rs.map(_.recovered).sum
+
+          s"""{"date":"$date","totalConfirmed":$totalC,"totalDeaths":$totalD,"totalRecovered":$totalR}"""
+        }
+        .toList
+        .sorted
 
     new PrintWriter(outputFile) {
-      write(summaryResults.mkString("[\n  ", ",\n  ", "\n]"))
+      write(toJsonArray(summaryResults))
       close()
     }
 
@@ -114,23 +122,32 @@ object CovidAnalysis {
 
   // Parallel version
   def dailySummaryParallel(inputFile: String, outputFile: String): Double = {
+
     val start = System.nanoTime()
-    
-    val lines = scala.io.Source.fromFile(inputFile).getLines().drop(1).toList
-    
-    val summaryResults = lines.par
-      .flatMap(parseLine)
-      .groupBy(_.date)
-      .map { case (date, records) =>
-        val totalC = records.map(_.confirmed).sum
-        val totalD = records.map(_.deaths).sum
-        val totalR = records.map(_.recovered).sum
-        s"""{"date":"$date","totalConfirmed":$totalC,"totalDeaths":$totalD,"totalRecovered":$totalR}"""
-      }
-      .toList.sorted
+
+    val lines = Source.fromFile(inputFile).getLines().drop(1).toList
+
+    val records =
+      lines
+        .map(parseLine)
+        .collect { case Right(r) => r }
+
+    val summaryResults =
+      records.par
+        .groupBy(_.date)
+        .map { case (date, rs) =>
+
+          val totalC = rs.map(_.confirmed).sum
+          val totalD = rs.map(_.deaths).sum
+          val totalR = rs.map(_.recovered).sum
+
+          s"""{"date":"$date","totalConfirmed":$totalC,"totalDeaths":$totalD,"totalRecovered":$totalR}"""
+        }
+        .toList
+        .sorted
 
     new PrintWriter(outputFile) {
-      write(summaryResults.mkString("[\n  ", ",\n  ", "\n]"))
+      write(toJsonArray(summaryResults))
       close()
     }
 
@@ -145,15 +162,19 @@ object CovidAnalysis {
 
     val lines = Source.fromFile(inputFile).getLines().drop(1).toList
 
-    val result =
+    val records =
       lines
-        .map(_.split(",").map(_.trim))
-        .groupBy(c => (c(0), c(2)))   // (date, region)
-        .map { case ((date, region), records) =>
+        .map(parseLine)
+        .collect { case Right(r) => r }
 
-          val confirmed = records.map(_(4).toDouble).sum
-          val deaths = records.map(_(5).toDouble).sum
-          val recovered = records.map(_(6).toDouble).sum
+    val result =
+      records
+        .groupBy(r => (r.date, r.region))
+        .map { case ((date, region), rs) =>
+
+          val confirmed = rs.map(_.confirmed).sum
+          val deaths = rs.map(_.deaths).sum
+          val recovered = rs.map(_.recovered).sum
 
           s"""{"date":"$date","region":"$region","confirmed":$confirmed,"deaths":$deaths,"recovered":$recovered}"""
         }
@@ -161,7 +182,7 @@ object CovidAnalysis {
         .sorted
 
     new PrintWriter(outputFile) {
-      write(result.mkString("[\n  ", ",\n  ", "\n]"))
+      write(toJsonArray(result))
       close()
     }
 
@@ -175,15 +196,19 @@ object CovidAnalysis {
 
     val lines = Source.fromFile(inputFile).getLines().drop(1).toList
 
-    val result =
-      lines.par
-        .map(_.split(",").map(_.trim))
-        .groupBy(c => (c(0), c(2)))
-        .map { case ((date, region), records) =>
+    val records =
+      lines
+        .map(parseLine)
+        .collect { case Right(r) => r }
 
-          val confirmed = records.map(_(4).toDouble).sum
-          val deaths = records.map(_(5).toDouble).sum
-          val recovered = records.map(_(6).toDouble).sum
+    val result =
+      records.par
+        .groupBy(r => (r.date, r.region))
+        .map { case ((date, region), rs) =>
+
+          val confirmed = rs.map(_.confirmed).sum
+          val deaths = rs.map(_.deaths).sum
+          val recovered = rs.map(_.recovered).sum
 
           s"""{"date":"$date","region":"$region","confirmed":$confirmed,"deaths":$deaths,"recovered":$recovered}"""
         }
@@ -191,7 +216,7 @@ object CovidAnalysis {
         .sorted
 
     new PrintWriter(outputFile) {
-      write(result.mkString("[\n  ", ",\n  ", "\n]"))
+      write(toJsonArray(result))
       close()
     }
 
@@ -202,6 +227,7 @@ object CovidAnalysis {
 
 
 @main def covidinru(): Unit = {
+
   val csvFile = "covid19-russia-cases-scrf.csv"
 
   val functionalTime = CovidAnalysis.totalImpact(csvFile, "result_functional.json")
@@ -215,6 +241,7 @@ object CovidAnalysis {
   println(f"Parallel Processing   : $parallelTime%.2f ms")
 
   val dailyfunctionalTime = CovidAnalysis.dailySummary(csvFile, "daily_summary_functional.json")
+
   val dailyparallelTime = CovidAnalysis.dailySummaryParallel(csvFile, "daily_summary_parallel.json")
 
   println("\nDaily Summary Aggregation (confirmed + Death + Recovered)")
@@ -223,11 +250,9 @@ object CovidAnalysis {
 
   println("\nDaily City Summary (confirmed, deaths, recovered per city per day)")
 
-  val cityTime =
-    CovidAnalysis.dailyCitySummary(csvFile, "daily_city_functional.json")
+  val cityTime = CovidAnalysis.dailyCitySummary(csvFile, "daily_city_functional.json")
 
-  val cityParallelTime =
-    CovidAnalysis.dailyCitySummaryParallel(csvFile, "daily_city_parallel.json")
+  val cityParallelTime = CovidAnalysis.dailyCitySummaryParallel(csvFile, "daily_city_parallel.json")
 
   println(f"Sequential Processing : $cityTime%.2f ms")
   println(f"Parallel Processing   : $cityParallelTime%.2f ms")
